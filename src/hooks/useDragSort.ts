@@ -69,11 +69,12 @@ export function useDragSort(providers: Record<string, Provider>, appId: AppId) {
         sortIndex: index,
       }));
 
+      // 乐观更新：立即更新本地状态
+      const previousProviders = queryClient.getQueryData<Provider[]>(["providers", appId]);
+      queryClient.setQueryData(["providers", appId], reordered);
+
       try {
         await providersApi.updateSortOrder(updates, appId);
-        await queryClient.invalidateQueries({
-          queryKey: ["providers", appId],
-        });
 
         // 刷新故障转移队列（因为队列顺序依赖 sort_index）
         await queryClient.invalidateQueries({
@@ -95,6 +96,10 @@ export function useDragSort(providers: Record<string, Provider>, appId: AppId) {
           { closeButton: true },
         );
       } catch (error) {
+        // 失败时回滚到之前的状态
+        if (previousProviders) {
+          queryClient.setQueryData(["providers", appId], previousProviders);
+        }
         console.error("Failed to update provider sort order", error);
         toast.error(
           t("provider.sortUpdateFailed", {
